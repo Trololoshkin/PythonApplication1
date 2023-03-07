@@ -155,7 +155,7 @@ def main():
             # Update the status label if an error occurs
             status_label.config(text="Failed to train neural network")
     
-    train_button = tk.Button(root, text='Train Network', command=train_network)
+    train_button = tk.Button(root, text='Train Network', command=train_network(database_path, status_label))
     train_button.pack()
     
     root.mainloop()
