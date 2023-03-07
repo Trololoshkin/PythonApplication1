@@ -42,28 +42,34 @@ class Order():
         self.balance += amount * price
         return self.balance
 
-def load_csv_file(file_path):
-    # Проверяем существует ли файл базы данных с таким же именем, как и csv-файл
-    db_path = os.path.splitext(file_path)[0] + '.db'
-    if os.path.exists(db_path):
-        # Если файл существует, подключаемся к базе данных
-        conn = sqlite3.connect(db_path)
-        c = conn.cursor()
-        print("Подключение к базе данных установлено")
+def load_csv_file():
+    global df
+    # Выбор файла
+    file_path = filedialog.askopenfilename()
+    if not file_path:
+        return
+    # Чтение файла
+    df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+    # Создание/подключение базы данных
+    db_file = os.path.splitext(file_path)[0] + ".db"
+    conn = sqlite3.connect(db_file)
+    # Проверка наличия таблицы в базе данных
+    c = conn.cursor()
+    c.execute("SELECT count(name) FROM sqlite_master WHERE type='table' AND name='prices'")
+    if c.fetchone()[0] != 1:
+        # Создание таблицы, если она не существует
+        c.execute('''CREATE TABLE prices
+                     (date TEXT PRIMARY KEY, open REAL, high REAL, low REAL, close REAL, volume REAL)''')
+        # Запись данных из DataFrame в таблицу
+        for index, row in df.iterrows():
+            c.execute("INSERT INTO prices VALUES (?, ?, ?, ?, ?, ?)", (index, row["Open"], row["High"], row["Low"], row["Close"], row["Volume"]))
+        conn.commit()
     else:
-        # Если файла нет, создаем новую базу данных
-        conn = sqlite3.connect(db_path)
-        c = conn.cursor()
-        # создаем таблицу с полями: дата, цена открытия, цена закрытия, высшая цена, низшая цена, объем
-        c.execute('''CREATE TABLE stocks (date text, open real, close real, high real, low real, volume real)''')
-        print("Новая база данных создана")
-
-    # Загружаем csv-файл в базу данных
-    df = pd.read_csv(file_path, delimiter=',', index_col=0, parse_dates=True)
-    df.to_sql('stocks', conn, if_exists='append')
-    print("Файл успешно загружен в базу данных")
-    conn.commit()
+        # Чтение данных из таблицы в DataFrame
+        df = pd.read_sql_query("SELECT * FROM prices", conn, index_col="date", parse_dates=["date"])
+    # Закрытие соединения с базой данных
     conn.close()
+
  
 def train_neural_network(file_path, db_file):
     data = load_csv_file(file_path)
