@@ -71,10 +71,6 @@ def load_csv_file():
     conn.close()
 
  
-def train_neural_network(file_path, db_file, csv_file, balance, percent, status_label):
-    data = load_csv_file(file_path)
-    create_database(db_file)
-    # TODO: train neural network
 
 def main():
     root = tk.Tk()
@@ -103,49 +99,61 @@ def main():
     load_database_button = tk.Button(root, text='Load Neural Network', command=open_database)
     load_database_button.pack()
     
-    def train_network():
-    # check if csv file and database are selected
-        if not csv_file_path:
-            status_label.config(text="Please select a CSV file")
-            return
-        if not db_conn:
-            status_label.config(text="Please connect to a database")
-            return
-    
-    # read csv file
-    try:
-        data = pd.read_csv(csv_file_path)
-    except Exception as e:
-        status_label.config(text="Failed to read CSV file")
-        return
-    
-    # preprocess data
-    x, y = preprocess_data(data)
-    
-    # split data into train and test sets
-    x_train, x_test, y_train, y_test = split_data(x, y)
-    
-    # create neural network model
-    input_dim = len(x.columns)
-    output_dim = 2
-    hidden_dim = 100
-    model = create_model(input_dim, hidden_dim, output_dim)
-    
-    # train neural network model
-    learning_rate = 0.001
-    epochs = 1000
-    train_model(model, x_train, y_train, learning_rate, epochs)
-    
-    # test neural network model
-    test_model(model, x_test, y_test)
-    
-    # save neural network model to database
-    model_name = os.path.splitext(os.path.basename(csv_file_path))[0]
-    model_table_name = "models"
-    save_model_to_db(model, model_name, model_table_name, db_conn)
-    
-    # update status label
-    status_label.config(text="Training complete")
+    def train_network(database_path, status_label):
+        try:
+            conn = sqlite3.connect(database_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT price, next_price FROM stock_data")
+            rows = cursor.fetchall()
+
+            # Convert the data into numpy arrays
+            dataset = np.array(rows)
+            x_train = dataset[:, 0].reshape(-1, 1).astype('float32')
+            y_train = dataset[:, 1].reshape(-1, 1).astype('float32')
+
+            # Normalize the data
+            x_norm = (x_train - np.mean(x_train)) / np.std(x_train)
+            y_norm = (y_train - np.mean(y_train)) / np.std(y_train)
+
+            # Convert the numpy arrays to PyTorch tensors
+            x_tensor = torch.from_numpy(x_norm)
+            y_tensor = torch.from_numpy(y_norm)
+
+            # Define the neural network
+            input_size = 1
+            hidden_size = 10
+            output_size = 1
+            model = nn.Sequential(
+                nn.Linear(input_size, hidden_size),
+                nn.ReLU(),
+                nn.Linear(hidden_size, output_size)
+            )
+
+            # Define the loss function and optimizer
+            criterion = nn.MSELoss()
+            optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+            # Train the network
+            num_epochs = 5000
+            for epoch in range(num_epochs):
+                # Forward pass
+                y_pred = model(x_tensor)
+                loss = criterion(y_pred, y_tensor)
+
+                # Backward pass and optimization
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+            # Save the trained model to disk
+            model_path = os.path.join(os.path.dirname(database_path), 'trained_model.pt')
+            torch.save(model.state_dict(), model_path)
+
+            # Update the status label
+            status_label.config(text="Neural network training completed")
+        except:
+            # Update the status label if an error occurs
+            status_label.config(text="Failed to train neural network")
     
     train_button = tk.Button(root, text='Train Network', command=train_network)
     train_button.pack()
