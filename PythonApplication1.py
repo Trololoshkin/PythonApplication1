@@ -104,15 +104,48 @@ def main():
     load_database_button.pack()
     
     def train_network():
-        balance = float(balance_field.get())
-        percent = float(percent_field.get())
-        print('Balance:', balance)
-        print('Percent:', percent)
-        file_path = filedialog.askopenfilename()
-        print('Selected file:', file_path)
-        db_file = filedialog.asksaveasfilename(defaultextension='.db')
-        print('Selected database:', db_file)
-        train_neural_network(file_path, db_file)
+    # check if csv file and database are selected
+    if not csv_file_path:
+        status_label.config(text="Please select a CSV file")
+        return
+    if not db_conn:
+        status_label.config(text="Please connect to a database")
+        return
+    
+    # read csv file
+    try:
+        data = pd.read_csv(csv_file_path)
+    except:
+        status_label.config(text="Failed to read CSV file")
+        return
+    
+    # preprocess data
+    x, y = preprocess_data(data)
+    
+    # split data into train and test sets
+    x_train, x_test, y_train, y_test = split_data(x, y)
+    
+    # create neural network model
+    input_dim = len(x.columns)
+    output_dim = 2
+    hidden_dim = 100
+    model = create_model(input_dim, hidden_dim, output_dim)
+    
+    # train neural network model
+    learning_rate = 0.001
+    epochs = 1000
+    train_model(model, x_train, y_train, learning_rate, epochs)
+    
+    # test neural network model
+    test_model(model, x_test, y_test)
+    
+    # save neural network model to database
+    model_name = os.path.splitext(os.path.basename(csv_file_path))[0]
+    model_table_name = "models"
+    save_model_to_db(model, model_name, model_table_name, db_conn)
+    
+    # update status label
+    status_label.config(text="Training complete")
     
     train_button = tk.Button(root, text='Train Network', command=train_network)
     train_button.pack()
@@ -121,4 +154,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
