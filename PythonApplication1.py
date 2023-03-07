@@ -1,3 +1,13 @@
+#1 объявление переменных, и всех import
+#2 функции ордеров (покупка, продажа, ждать, закывать)
+#3 интерфейс, два поля для ввода информации
+# 3.1текущий баланс
+# 3.2 процент - будет использован в фукциях ордеров
+#4 три кнопки
+# 4.1 первая - загрузка файла , на которм будет проводится обчуение Нейросети
+# 4.2 вторая -  подключение базы нейросети (создание, если база отсутствует). Используем SQLite.
+# 4.3 третья — запуск обучения нейросети
+#5 функция обучения нейросети на основе фала из пукта 4.1, и сохранение базы нейронной сети в файле указанном в пункте 4.2.
 import tkinter as tk
 from tkinter import filedialog
 import pandas as pd
@@ -11,126 +21,92 @@ import time
 import csv
 import os
 
+class Order():
+    def __init__(self, balance, percent):
+        self.balance = balance
+        self.percent = percent
+        
+    def buy(self, price):
+        amount = self.balance * self.percent
+        self.balance -= amount
+        return amount/price
+        
+    def sell(self, amount, price):
+        self.balance += amount * price
+        return self.balance
+        
+    def wait(self):
+        return None
+        
+    def close(self, amount, price):
+        self.balance += amount * price
+        return self.balance
 
-# Окошко с кнопошками
-import pandas as pd
-import numpy as np
-from sklearn.neural_network import MLPClassifier
+def load_csv_file(file_path):
+    data = pd.read_csv(file_path)
+    return data
 
-# Функции выставления ордеров на покупку и продажу
-def buy(price, capital):
-    units = capital // price
-    return units
-
-def sell(price, units):
-    return units * price
-
-# Функция для закрытия сделки и добавления прибыли/убытка в исходный капитал
-def close_trade(trade, price, capital):
-    if trade['type'] == 'buy':
-        profit = sell(price, trade['units']) - trade['cost']
-    else:
-        profit = trade['cost'] - sell(price, trade['units'])
-    return capital + profit
-
-# Загрузка данных из файла
-df = pd.read_csv('quotes.csv')
-
-# Изменение столбца "Изменение" на числовое значение
-df['Изменение'] = df['Изменение'].str.replace('%', '').astype(float)
-
-# Выбор колонок с ценой и изменением для обучения модели
-train_df = df[['Цена', 'Изменение']][:-10]
-
-# Выбор колонок с ценой и изменением для тестирования модели
-test_df = df[['Цена', 'Изменение']][-10:]
-
-# Создание экземпляра классификатора и обучение модели
-model = MLPClassifier(hidden_layer_sizes=(10,10), max_iter=1000)
-model.fit(train_df, np.array(df['Действие'][:-10]))
-
-# Тестирование модели
-capital = 1000
-current_trade = None
-for index, row in test_df.iterrows():
-    # Вычисляем текущее значение цены и изменения
-    price = row['Цена']
-    change = row['Изменение']
-
-    # Делаем предсказание
-    X_test = np.array([[price, change]])
-    prediction = model.predict(X_test)[0]
-
-    # Проверяем, нужно ли открыть новую сделку
-    if prediction == 'buy' and not current_trade:
-        units = buy(price, capital)
-        cost = price * units
-        current_trade = {'type': 'buy', 'units': units, 'cost': cost}
-        capital -= cost
-    elif prediction == 'sell' and current_trade:
-        capital = close_trade(current_trade, price, capital)
-        current_trade = None
-
-# Вывод итогового капитала
-print(f"Final capital: {capital}")
-
-# Функция для создания таблицы нейросети
-
-
-# функция для создания таблицы в базе данных
-def create_table(cursor):
-    cursor.execute('''CREATE TABLE IF NOT EXISTS stock_prices
-                    (id INTEGER PRIMARY KEY,
-                     date TEXT,
-                     open REAL,
-                     high REAL,
-                     low REAL,
-                     close REAL)''')
-
-# функция для загрузки файла csv
-def load_csv_file():
-    file_path = filedialog.askopenfilename()
-    return file_path
-
-# функция для создания/подключения к базе данных
-def create_database():
-    conn = sqlite3.connect("neural_net.db")
+def create_database(db_file):
+    conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-    create_table(cursor)
-    return conn, cursor
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS neural_network(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            input TEXT,
+            output REAL
+        )
+    ''')
+    conn.commit()
+    conn.close()
 
-# функция для обучения нейронной сети
-def train_neural_net():
-    # код обучения нейронной сети
-    pass
+def train_neural_network(file_path, db_file):
+    data = load_csv_file(file_path)
+    create_database(db_file)
+    # TODO: train neural network
 
-# создание окна
-root = tk.Tk()
-root.geometry("200x400")
-root.title("Stock Prediction")
+def main():
+    root = tk.Tk()
+    root.geometry('200x400')
+    root.title('Trading Bot')
+    
+    # Fields for input
+    balance_field = tk.Entry(root)
+    balance_field.pack()
+    
+    percent_field = tk.Entry(root)
+    percent_field.pack()
+    
+    # Buttons
+    def open_file():
+        file_path = filedialog.askopenfilename()
+        print('Selected file:', file_path)
+    
+    load_file_button = tk.Button(root, text='Load CSV file', command=open_file)
+    load_file_button.pack()
+    
+    def open_database():
+        db_file = filedialog.askopenfilename()
+        print('Selected database:', db_file)
+    
+    load_database_button = tk.Button(root, text='Load Neural Network', command=open_database)
+    load_database_button.pack()
+    
+    def train_network():
+        balance = float(balance_field.get())
+        percent = float(percent_field.get())
+        print('Balance:', balance)
+        print('Percent:', percent)
+        file_path = filedialog.askopenfilename()
+        print('Selected file:', file_path)
+        db_file = filedialog.asksaveasfilename(defaultextension='.db')
+        print('Selected database:', db_file)
+        train_neural_network(file_path, db_file)
+    
+    train_button = tk.Button(root, text='Train Network', command=train_network)
+    train_button.pack()
+    
+    root.mainloop()
 
-# добавление элементов на окно
-balance_label = tk.Label(root, text="Balance:")
-balance_label.pack()
-
-balance_entry = tk.Entry(root)
-balance_entry.pack()
-
-bet_label = tk.Label(root, text="Bet (% of balance):")
-bet_label.pack()
-
-bet_entry = tk.Entry(root)
-bet_entry.pack()
-
-load_file_button = tk.Button(root, text="Load File", command=load_csv_file)
-load_file_button.pack()
-
-create_db_button = tk.Button(root, text="Create/Connect to Database", command=create_database)
-create_db_button.pack()
-
-train_button = tk.Button(root, text="Train Neural Network", command=train_neural_net)
-train_button.pack()
-
-# запуск окна
-root.mainloop()
+if __name__ == '__main__':
+    main()
 
