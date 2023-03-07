@@ -71,7 +71,7 @@ def load_csv_file():
     conn.close()
 
  
-def train_neural_network(file_path, db_file):
+def train_neural_network(file_path, db_file, csv_file, balance, percent, status_label):
     data = load_csv_file(file_path)
     create_database(db_file)
     # TODO: train neural network
@@ -105,17 +105,17 @@ def main():
     
     def train_network():
     # check if csv file and database are selected
-    if not csv_file_path:
-        status_label.config(text="Please select a CSV file")
-        return
-    if not db_conn:
-        status_label.config(text="Please connect to a database")
-        return
+        if not csv_file_path:
+            status_label.config(text="Please select a CSV file")
+            return
+        if not db_conn:
+            status_label.config(text="Please connect to a database")
+            return
     
     # read csv file
     try:
         data = pd.read_csv(csv_file_path)
-    except:
+    except Exception as e:
         status_label.config(text="Failed to read CSV file")
         return
     
