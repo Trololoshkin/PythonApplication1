@@ -43,22 +43,28 @@ class Order():
         return self.balance
 
 def load_csv_file(file_path):
-    data = pd.read_csv(file_path)
-    return data
+    # Проверяем существует ли файл базы данных с таким же именем, как и csv-файл
+    db_path = os.path.splitext(file_path)[0] + '.db'
+    if os.path.exists(db_path):
+        # Если файл существует, подключаемся к базе данных
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        print("Подключение к базе данных установлено")
+    else:
+        # Если файла нет, создаем новую базу данных
+        conn = sqlite3.connect(db_path)
+        c = conn.cursor()
+        # создаем таблицу с полями: дата, цена открытия, цена закрытия, высшая цена, низшая цена, объем
+        c.execute('''CREATE TABLE stocks (date text, open real, close real, high real, low real, volume real)''')
+        print("Новая база данных создана")
 
-def create_database(db_file):
-    conn = sqlite3.connect(db_file)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS neural_network(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            input TEXT,
-            output REAL
-        )
-    ''')
+    # Загружаем csv-файл в базу данных
+    df = pd.read_csv(file_path, delimiter=',', index_col=0, parse_dates=True)
+    df.to_sql('stocks', conn, if_exists='append')
+    print("Файл успешно загружен в базу данных")
     conn.commit()
     conn.close()
-
+ 
 def train_neural_network(file_path, db_file):
     data = load_csv_file(file_path)
     create_database(db_file)
