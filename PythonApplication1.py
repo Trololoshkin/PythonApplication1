@@ -100,60 +100,83 @@ def main():
     load_database_button.pack()
     
     def train_network(database_path, status_label):
-        try:
-            conn = sqlite3.connect(database_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT price, next_price FROM stock_data")
-            rows = cursor.fetchall()
+    # проверяем существует ли база данных
+    if not os.path.isfile(database_path):
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE stocks
+                    (date text, open real, high real, low real, close real, volume real)''')
+        conn.commit()
+        conn.close()
 
-            # Convert the data into numpy arrays
-            dataset = np.array(rows)
-            x_train = dataset[:, 0].reshape(-1, 1).astype('float32')
-            y_train = dataset[:, 1].reshape(-1, 1).astype('float32')
+    try:
+        # загружаем csv файл
+        csv_file_path = filedialog.askopenfilename(title="Select CSV file", filetypes=[("CSV Files", "*.csv")])
+        if not csv_file_path:
+            return
+        status_label.config(text="Reading CSV file...")
 
-            # Normalize the data
-            x_norm = (x_train - np.mean(x_train)) / np.std(x_train)
-            y_norm = (y_train - np.mean(y_train)) / np.std(y_train)
+        # проверяем наличие заголовков
+        with open(csv_file_path, newline='') as f:
+            reader = csv.reader(f)
+            headers = next(reader)
+            if not all(header in headers for header in ['Open', 'High', 'Low', 'Close']):
+                status_label.config(text="CSV file is missing required columns")
+                return
 
-            # Convert the numpy arrays to PyTorch tensors
-            x_tensor = torch.from_numpy(x_norm)
-            y_tensor = torch.from_numpy(y_norm)
+        # загружаем данные из csv файла
+        df = pd.read_csv(csv_file_path)
 
-            # Define the neural network
-            input_size = 1
-            hidden_size = 10
-            output_size = 1
-            model = nn.Sequential(
-                nn.Linear(input_size, hidden_size),
-                nn.ReLU(),
-                nn.Linear(hidden_size, output_size)
-            )
+        # создаём нейронную сеть
+        input_size = 4
+        hidden_size = 16
+        output_size = 1
+        model = nn.Sequential(
+            nn.Linear(input_size, hidden_size),
+            nn.ReLU(),
+            nn.Linear(hidden_size, output_size),
+            nn.Sigmoid()
+        )
 
-            # Define the loss function and optimizer
-            criterion = nn.MSELoss()
-            optimizer = optim.Adam(model.parameters(), lr=0.001)
+        # определяем функцию потерь и оптимизатор
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(model.parameters())
 
-            # Train the network
-            num_epochs = 5000
-            for epoch in range(num_epochs):
-                # Forward pass
-                y_pred = model(x_tensor)
-                loss = criterion(y_pred, y_tensor)
+        # генерируем случайные индексы для тренировочного набора данных
+        indices = np.arange(len(df))
+        np.random.shuffle(indices)
+        train_indices = indices[:int(0.7*len(df))]
 
-                # Backward pass and optimization
+        # тренируем модель
+        status_label.config(text="Training network...")
+        for i in range(200):
+            total_loss = 0
+            for j in train_indices:
+                input_tensor = torch.tensor(df.iloc[j][['Open', 'High', 'Low', 'Close']].values)
+                output_tensor = torch.tensor(df.iloc[j]['Close'])
                 optimizer.zero_grad()
+                loss = criterion(model(input_tensor), output_tensor)
                 loss.backward()
                 optimizer.step()
+                total_loss += loss.item()
+            avg_loss = total_loss / len(train_indices)
+            if i % 10 == 0:
+                status_label.config(text="Training network... Epoch {}, Avg. Loss: {:.4f}".format(i, avg_loss))
+        status_label.config(text="Network trained successfully")
 
-            # Save the trained model to disk
-            model_path = os.path.join(os.path.dirname(database_path), 'trained_model.pt')
-            torch.save(model.state_dict(), model_path)
+        # сохраняем модель в базу данных
+        conn = sqlite3.connect(database_path)
+        c = conn.cursor()
+        c.execute("DROP TABLE IF EXISTS model")
+        c.execute("CREATE TABLE model (params BLOB)")
+        params = model.state_dict()
+        c.execute("INSERT INTO model (params) VALUES (?)", (pickle.dumps(params),))
+        conn.commit()
+        conn.close()
 
-            # Update the status label
-            status_label.config(text="Neural network training completed")
-        except:
-            # Update the status label if an error occurs
-            status_label.config(text="Failed to train neural network")
+    except Exception as e:
+        print(e)
+        status_label.config(text="Failed to train network")
     
     train_button = tk.Button(root, text='Train Network', command=train_network(database_path, status_label))
     train_button.pack()
